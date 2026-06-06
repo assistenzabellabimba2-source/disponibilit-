@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<title>Disponibilità Live</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.7.1/firebase-app-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.7.1/firebase-database-compat.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{height:-webkit-fill-available}
+body{font-family:-apple-system,system-ui,sans-serif;background:#f8fafc;min-height:100vh;min-height:-webkit-fill-available;-webkit-text-size-adjust:100%}
+
+#setupScreen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;min-height:-webkit-fill-available;padding:20px}
+.setup-card{background:#fff;border-radius:20px;padding:28px 22px;max-width:500px;width:100%;box-shadow:0 4px 24px rgba(0,0,0,.08)}
+.setup-logo{font-size:38px;text-align:center;margin-bottom:8px}
+.setup-title{font-size:20px;font-weight:800;color:#111;text-align:center;margin-bottom:4px}
+.setup-sub{font-size:14px;color:#6b7280;text-align:center;margin-bottom:22px;line-height:1.5}
+.steps{display:flex;flex-direction:column;gap:12px;margin-bottom:22px}
+.step{display:flex;gap:12px;align-items:flex-start}
+.step-num{background:#6366f1;color:#fff;border-radius:50%;min-width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;margin-top:1px}
+.step-text{font-size:13px;color:#374151;line-height:1.5}
+.step-text a{color:#6366f1;font-weight:600}
+.step-text code{background:#f3f4f6;padding:2px 6px;border-radius:4px;font-size:12px;font-family:monospace}
+.config-area{width:100%;border:1.5px solid #d1d5db;border-radius:10px;padding:12px;font-family:monospace;font-size:13px;height:120px;resize:none;outline:none;margin-bottom:12px;color:#374151;-webkit-appearance:none}
+.config-area:focus{border-color:#6366f1}
+.btn-connect{width:100%;padding:15px;background:#6366f1;color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;margin-bottom:10px;-webkit-appearance:none}
+.btn-demo{width:100%;padding:12px;background:#f8fafc;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;-webkit-appearance:none}
+.err-msg{background:#fef2f2;color:#ef4444;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:12px;display:none;line-height:1.4}
+
+#appScreen{display:none;min-height:100vh;min-height:-webkit-fill-available}
+.header{background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:16px 16px 14px;padding-top:calc(16px + env(safe-area-inset-top));color:#fff;position:-webkit-sticky;position:sticky;top:0;z-index:100}
+.header-inner{max-width:600px;margin:0 auto}
+.header-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.header-title{font-weight:800;font-size:18px}
+.header-sub{font-size:11px;opacity:.75;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
+.status-dot{width:8px;height:8px;border-radius:50%;background:#4ade80;display:inline-block;margin-right:5px;animation:pulse 2s infinite}
+.status-dot.offline{background:#f87171;animation:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.btn-hdr{background:rgba(255,255,255,.2);border:1.5px solid rgba(255,255,255,.35);color:#fff;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer;-webkit-appearance:none}
+.search-wrap{position:relative}
+.search-icon{position:absolute;left:13px;top:50%;transform:translateY(-50%);font-size:16px;pointer-events:none}
+#searchInput{width:100%;padding:13px 13px 13px 38px;border-radius:12px;border:none;font-size:16px;outline:none;-webkit-appearance:none;background:#fff}
+
+.main{max-width:600px;margin:0 auto;padding:14px 16px;padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+
+.stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+.stat{border-radius:12px;padding:10px 6px;text-align:center;cursor:pointer;border:2px solid transparent;transition:all .15s;-webkit-user-select:none;user-select:none}
+.stat-val{font-size:22px;font-weight:800;line-height:1.1}
+.stat-lbl{font-size:10px;font-weight:600;margin-top:3px}
+.stat-ok{background:#f0fdf4;color:#10b981}.stat-ok.active{background:#10b981}.stat-ok.active .stat-val,.stat-ok.active .stat-lbl{color:#fff}
+.stat-low{background:#fffbeb;color:#f59e0b}.stat-low.active{background:#f59e0b}.stat-low.active .stat-val,.stat-low.active .stat-lbl{color:#fff}
+.stat-out{background:#fef2f2;color:#ef4444}.stat-out.active{background:#ef4444}.stat-out.active .stat-val,.stat-out.active .stat-lbl{color:#fff}
+
+.cats{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;margin-bottom:10px;scrollbar-width:none}
+.cats::-webkit-scrollbar{display:none}
+.cat-btn{white-space:nowrap;padding:6px 14px;border-radius:20px;border:1.5px solid #e5e7eb;background:#fff;color:#374151;font-size:13px;font-weight:600;cursor:pointer;-webkit-appearance:none;-webkit-user-select:none;user-select:none}
+.cat-btn.active{background:#6366f1;border-color:#6366f1;color:#fff}
+
+.count{font-size:12px;color:#9ca3af;margin-bottom:8px}
+.list{display:flex;flex-direction:column;gap:8px}
+
+/* Card espandibile */
+.card{background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);border-left:4px solid;overflow:hidden;cursor:pointer}
+.card-main{padding:13px 15px;display:flex;justify-content:space-between;align-items:center}
+.card-name{font-weight:700;font-size:15px;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card-meta{font-size:11px;color:#9ca3af;margin-top:3px}
+.card-right{text-align:right;margin-left:10px;flex-shrink:0}
+.badge{border-radius:7px;padding:4px 9px;font-size:11px;font-weight:700}
+.badge-ok{background:#f0fdf4;color:#10b981}
+.badge-low{background:#fffbeb;color:#f59e0b}
+.badge-out{background:#fef2f2;color:#ef4444}
+.qty-negozio{font-size:12px;color:#6b7280;margin-top:3px}
+
+/* Dettaglio espanso */
+.card-detail{display:none;padding:0 15px 14px;border-top:1px solid #f3f4f6}
+.card-detail.open{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px}
+.detail-box{background:#f8fafc;border-radius:10px;padding:10px 8px;text-align:center}
+.detail-val{font-size:18px;font-weight:800;color:#374151}
+.detail-lbl{font-size:10px;color:#9ca3af;margin-top:3px;font-weight:600}
+.detail-box.deposito .detail-val{color:#6366f1}
+.detail-box.prezzo .detail-val{color:#10b981;font-size:15px}
+
+.empty-state{text-align:center;padding:50px 20px;color:#9ca3af}
+.empty-state .big{font-size:46px;margin-bottom:12px}
+.empty-state p{font-size:14px;line-height:1.6}
+.live-banner{background:#ecfdf5;border:1.5px solid #6ee7b7;border-radius:10px;padding:10px 14px;font-size:12px;color:#065f46;margin-bottom:12px;display:none;align-items:center;gap:8px;line-height:1.4}
+.demo-banner{background:#fef3c7;border:1.5px solid #fcd34d;border-radius:10px;padding:10px 14px;font-size:12px;color:#92400e;margin-bottom:12px;display:none;line-height:1.4}
+
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:flex-end;justify-content:center}
+.overlay.show{display:flex}
+.modal{background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:500px;padding:24px 20px;padding-bottom:calc(24px + env(safe-area-inset-bottom));max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.modal-handle{width:36px;height:4px;background:#e5e7eb;border-radius:2px;margin:0 auto 18px}
+.modal-title{font-size:17px;font-weight:800;color:#111;margin-bottom:4px}
+.modal-sub{font-size:13px;color:#6b7280;margin-bottom:18px}
+.field-group{background:#f8fafc;border-radius:12px;padding:14px;margin-bottom:12px}
+.field-group-title{font-size:11px;font-weight:700;color:#6366f1;text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px}
+.field-lbl{font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:5px}
+.field-sel{width:100%;padding:12px;border-radius:10px;border:1.5px solid #d1d5db;font-size:16px;background:#fff;margin-bottom:10px;-webkit-appearance:none;color:#111}
+.field-sel:last-child{margin-bottom:0}
+.btn-apply{width:100%;padding:15px;background:#6366f1;color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;-webkit-appearance:none;margin-top:4px}
+
+.toast{position:fixed;bottom:calc(24px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:#1f2937;color:#fff;padding:12px 20px;border-radius:12px;font-size:14px;font-weight:600;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999;white-space:nowrap;max-width:90vw;text-align:center}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<div id="setupScreen">
+  <div class="setup-card">
+    <div class="setup-logo">🔴</div>
+    <div class="setup-title">Configura il database live</div>
+    <div class="setup-sub">Connetti Firebase per aggiornamenti in tempo reale su tutti i dispositivi</div>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-text">Vai su <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a> e crea un progetto</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-text"><strong>Build → Realtime Database</strong> → crea database → Europa</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-text"><strong>Regole</strong> → <code>".read": true, ".write": true</code> → Pubblica</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-text"><strong>Impostazioni ⚙️ → App Web</strong> → copia <code>firebaseConfig</code> e incollalo qui sotto</div></div>
+    </div>
+    <div class="err-msg" id="errMsg"></div>
+    <textarea class="config-area" id="configArea" placeholder='{ "apiKey": "...", "databaseURL": "https://....firebaseio.com", ... }'></textarea>
+    <button class="btn-connect" onclick="connectFirebase()">🔗 Connetti</button>
+    <button class="btn-demo" onclick="startDemo()">👁️ Modalità demo</button>
+  </div>
+</div>
+
+<div id="appScreen">
+  <div class="header">
+    <div class="header-inner">
+      <div class="header-row">
+        <div>
+          <div class="header-title"><span class="status-dot" id="statusDot"></span>Disponibilità Live</div>
+          <div class="header-sub" id="lastUpdate">In attesa di dati...</div>
+        </div>
+        <label class="btn-hdr">📂 Aggiorna
+          <input type="file" accept=".xlsx,.xls,.csv" style="display:none" id="fileInput"/>
+        </label>
+      </div>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input id="searchInput" placeholder="Cerca per nome o codice..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      </div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div id="liveBanner" class="live-banner"><span>🟢</span><span>Connesso — aggiornamenti automatici per tutti</span></div>
+    <div id="demoBanner" class="demo-banner">⚠️ <strong>Demo</strong> — aggiornamenti non condivisi.</div>
+    <div class="stats">
+      <div class="stat stat-ok" id="statOk" onclick="toggleFilter('ok')"><div class="stat-val" id="valOk">0</div><div class="stat-lbl">Disponibili</div></div>
+      <div class="stat stat-low" id="statLow" onclick="toggleFilter('low')"><div class="stat-val" id="valLow">0</div><div class="stat-lbl">Scorta bassa</div></div>
+      <div class="stat stat-out" id="statOut" onclick="toggleFilter('out')"><div class="stat-val" id="valOut">0</div><div class="stat-lbl">Esauriti</div></div>
+    </div>
+    <div class="cats" id="cats"></div>
+    <div class="count" id="count"></div>
+    <div class="list" id="list">
+      <div class="empty-state"><div class="big">📦</div><p>Nessun prodotto ancora caricato.<br/>Premi <strong>📂 Aggiorna</strong> per caricare il primo file.</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📋 Associa le colonne</div>
+    <div class="modal-sub" id="modalSub">Indica quali colonne del file corrispondono ai campi</div>
+
+    <div class="field-group">
+      <div class="field-group-title">📦 Campi principali</div>
+      <label class="field-lbl">Nome prodotto <span style="color:#ef4444">*</span></label>
+      <select class="field-sel" id="colName"></select>
+      <label class="field-lbl">Codice / SKU</label>
+      <select class="field-sel" id="colCode"></select>
+      <label class="field-lbl">Categoria</label>
+      <select class="field-sel" id="colCat"></select>
+    </div>
+
+    <div class="field-group">
+      <div class="field-group-title">🔢 Quantità</div>
+      <label class="field-lbl">Quantità in negozio <span style="color:#ef4444">*</span></label>
+      <select class="field-sel" id="colQty"></select>
+      <label class="field-lbl">Quantità in deposito</label>
+      <select class="field-sel" id="colDeposit"></select>
+    </div>
+
+    <div class="field-group">
+      <div class="field-group-title">💶 Prezzo</div>
+      <label class="field-lbl">Prezzo di vendita</label>
+      <select class="field-sel" id="colPrice"></select>
+    </div>
+
+    <button class="btn-apply" onclick="applyMapping()">✅ Pubblica per tutti</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var FIREBASE_CONFIG={apiKey:"AIzaSyBw6oiO21ggmrfPH_ot9BSf8oEekOnFa-0",authDomain:"disponibilita-negozio.firebaseapp.com",databaseURL:"https://disponibilita-negozio-default-rtdb.europe-west1.firebasedatabase.app",projectId:"disponibilita-negozio",storageBucket:"disponibilita-negozio.firebasestorage.app",messagingSenderId:"467890588218",appId:"1:467890588218:web:5e3db2e3f7cb2a809d8303"};
+
+var db=null,isDemo=false,products=[],activeFilter="tutti",rawData=null,rawCols=null,pendingFile=null;
+
+var DEMO_DATA=[
+  {Codice:"ART001",Prodotto:"Scarpe Running Pro",Categoria:"Calzature",Quantità:12,Deposito:30,Prezzo:89.90},
+  {Codice:"ART002",Prodotto:"T-Shirt Cotton Basic",Categoria:"Abbigliamento",Quantità:3,Deposito:0,Prezzo:24.90},
+  {Codice:"ART003",Prodotto:"Zaino Trek 40L",Categoria:"Accessori",Quantità:0,Deposito:5,Prezzo:129.00},
+  {Codice:"ART004",Prodotto:"Giacca Impermeabile",Categoria:"Abbigliamento",Quantità:7,Deposito:12,Prezzo:199.00},
+  {Codice:"ART005",Prodotto:"Calzini Sport Pack",Categoria:"Accessori",Quantità:5,Deposito:40,Prezzo:9.90},
+  {Codice:"ART006",Prodotto:"Borraccia 750ml",Categoria:"Accessori",Quantità:0,Deposito:0,Prezzo:19.90},
+  {Codice:"ART007",Prodotto:"Pantaloni Trekking",Categoria:"Abbigliamento",Quantità:2,Deposito:8,Prezzo:79.90},
+  {Codice:"ART008",Prodotto:"Scarpe Trail GTX",Categoria:"Calzature",Quantità:9,Deposito:15,Prezzo:149.00}
+];
+
+window.addEventListener("load",function(){
+  try{
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db=firebase.database();
+    db.ref(".info/connected").on("value",function(s){
+      var dot=document.getElementById("statusDot");
+      if(s.val()){dot.classList.remove("offline");}else{dot.classList.add("offline");}
+    });
+    openApp(false);
+    listenFirebase();
+  }catch(e){console.error(e);}
+});
+
+function connectFirebase(){
+  var raw=document.getElementById("configArea").value.trim();
+  var err=document.getElementById("errMsg");
+  err.style.display="none";
+  if(!raw){err.textContent="Incolla la configurazione Firebase.";err.style.display="block";return;}
+  try{
+    raw=raw.replace(/^[^{]*/,"").replace(/[^}]*$/,"");
+    var cfg=JSON.parse(raw);
+    if(!cfg.databaseURL){err.textContent='Manca "databaseURL".';err.style.display="block";return;}
+    firebase.initializeApp(cfg);
+    db=firebase.database();
+    db.ref(".info/connected").on("value",function(s){
+      var dot=document.getElementById("statusDot");
+      if(s.val()){dot.classList.remove("offline");}else{dot.classList.add("offline");}
+    });
+    openApp(false);listenFirebase();showToast("✅ Connesso!");
+  }catch(e){err.textContent="Configurazione non valida: "+e.message;err.style.display="block";}
+}
+
+function listenFirebase(){
+  db.ref("inventory").on("value",function(snap){
+    var data=snap.val();
+    if(data&&data.products&&data.products.length){
+      products=data.products;
+      var d=new Date(data.lastUpdated);
+      document.getElementById("lastUpdate").textContent=(data.fileName||"File")+" — "+d.toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"})+" del "+d.toLocaleDateString("it-IT");
+      render();
+    }
+  });
+}
+
+function publishToFirebase(prods,fileName){
+  db.ref("inventory").set({products:prods,fileName:fileName,lastUpdated:Date.now()},function(e){
+    if(e){showToast("❌ Errore pubblicazione");}
+    else{showToast("✅ Dati pubblicati per tutto il team!");}
+  });
+}
+
+function startDemo(){
+  isDemo=true;openApp(true);products=DEMO_DATA;
+  document.getElementById("lastUpdate").textContent="Dati demo";render();
+}
+
+function openApp(demo){
+  document.getElementById("setupScreen").style.display="none";
+  document.getElementById("appScreen").style.display="block";
+  document.getElementById("liveBanner").style.display=demo?"none":"flex";
+  document.getElementById("demoBanner").style.display=demo?"block":"none";
+}
+
+function parseFile(file){
+  pendingFile=file.name;
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var wb=XLSX.read(e.target.result,{type:"binary"});
+    var ws=wb.Sheets[wb.SheetNames[0]];
+    var data=XLSX.utils.sheet_to_json(ws,{defval:""});
+    if(!data.length){showToast("❌ File vuoto");return;}
+    rawCols=Object.keys(data[0]);rawData=data;
+    document.getElementById("modalSub").textContent="File: "+file.name;
+    var guess=function(h){return rawCols.find(function(c){return h.some(function(x){return c.toLowerCase().indexOf(x)>=0;})})||"";};
+    pop("colName",guess(["prod","nome","desc","item","articolo"]));
+    pop("colQty",guess(["negozio","store","vendita","qta","qtà","qty","disp","stock","quant","giacenz"]));
+    pop("colDeposit",guess(["deposit","magaz","magazz","wareho","riserva"]),"");
+    pop("colCode",guess(["cod","sku","id","art"]),"");
+    pop("colCat",guess(["cat","tipo","gruppo"]),"");
+    pop("colPrice",guess(["prezzo","price","costo","euro","pvp","pv"]),"");
+    document.getElementById("overlay").classList.add("show");
+  };
+  reader.readAsBinaryString(file);
+}
+
+function pop(id,sel,empty){
+  var el=document.getElementById(id);
+  el.innerHTML=(empty!==undefined?'<option value="">— Non presente —</option>':"")+
+    rawCols.map(function(c){return'<option value="'+c+'"'+(c===sel?' selected':'')+'>'+c+'</option>';}).join("");
+}
+
+function applyMapping(){
+  var n=document.getElementById("colName").value;
+  var q=document.getElementById("colQty").value;
+  var c=document.getElementById("colCode").value;
+  var k=document.getElementById("colCat").value;
+  var dep=document.getElementById("colDeposit").value;
+  var pr=document.getElementById("colPrice").value;
+  var mapped=rawData.map(function(r){return{
+    Codice:c?String(r[c]||""):"",
+    Prodotto:n?String(r[n]||""):"",
+    Categoria:k?String(r[k]||""):"",
+    Quantità:q?Number(r[q])||0:0,
+    Deposito:dep?Number(r[dep])||0:null,
+    Prezzo:pr?Number(String(r[pr]).replace(",","."))||null:null
+  };}).filter(function(r){return r.Prodotto||r.Codice;});
+  document.getElementById("overlay").classList.remove("show");
+  if(isDemo){products=mapped;activeFilter="tutti";render();showToast("✅ "+mapped.length+" prodotti (demo)");}
+  else{publishToFirebase(mapped,pendingFile);}
+}
+
+function status(q){
+  if(q<=0)return{l:"Non disponibile",c:"badge-out",b:"#ef4444"};
+  if(q<=5)return{l:"Scorta bassa",c:"badge-low",b:"#f59e0b"};
+  return{l:"Disponibile",c:"badge-ok",b:"#10b981"};
+}
+
+function toggleCard(id){
+  var el=document.getElementById("detail-"+id);
+  if(!el)return;
+  el.classList.toggle("open");
+}
+
+function render(){
+  var q=document.getElementById("searchInput").value.toLowerCase();
+  var filtered=products.filter(function(p){
+    var mq=!q||p.Prodotto.toLowerCase().indexOf(q)>=0||p.Codice.toLowerCase().indexOf(q)>=0;
+    var mf=activeFilter==="tutti"||(activeFilter==="ok"&&p.Quantità>5)||(activeFilter==="low"&&p.Quantità>0&&p.Quantità<=5)||(activeFilter==="out"&&p.Quantità<=0)||p.Categoria===activeFilter;
+    return mq&&mf;
+  });
+  document.getElementById("valOk").textContent=products.filter(function(p){return p.Quantità>5;}).length;
+  document.getElementById("valLow").textContent=products.filter(function(p){return p.Quantità>0&&p.Quantità<=5;}).length;
+  document.getElementById("valOut").textContent=products.filter(function(p){return p.Quantità<=0;}).length;
+
+  var catSet={},cats=[];
+  products.forEach(function(p){if(p.Categoria&&!catSet[p.Categoria]){catSet[p.Categoria]=1;cats.push(p.Categoria);}});
+  var ce=document.getElementById("cats");
+  ce.innerHTML=cats.length?["tutti"].concat(cats).map(function(c){
+    return'<button class="cat-btn'+(activeFilter===c?" active":"")+'" onclick="setFilter(\''+c+'\')">'+c.charAt(0).toUpperCase()+c.slice(1)+'</button>';
+  }).join(""):"";
+
+  document.getElementById("count").textContent=filtered.length+" prodott"+(filtered.length===1?"o":"i")+" trovati";
+  var list=document.getElementById("list");
+  if(!filtered.length){list.innerHTML='<div class="empty-state"><div class="big">🔍</div><p>Nessun prodotto trovato</p></div>';return;}
+
+  list.innerHTML=filtered.map(function(p,i){
+    var s=status(p.Quantità);
+    var hasExtra=(p.Deposito!==null&&p.Deposito!==undefined)||(p.Prezzo!==null&&p.Prezzo!==undefined);
+    var detailBoxes="";
+    detailBoxes+='<div class="detail-box"><div class="detail-val">'+p.Quantità+'</div><div class="detail-lbl">In negozio</div></div>';
+    if(p.Deposito!==null&&p.Deposito!==undefined){
+      detailBoxes+='<div class="detail-box deposito"><div class="detail-val">'+p.Deposito+'</div><div class="detail-lbl">In deposito</div></div>';
+    }
+    if(p.Prezzo!==null&&p.Prezzo!==undefined){
+      detailBoxes+='<div class="detail-box prezzo"><div class="detail-val">€ '+Number(p.Prezzo).toFixed(2)+'</div><div class="detail-lbl">Prezzo</div></div>';
+    }
+    return'<div class="card" style="border-color:'+s.b+'" onclick="toggleCard('+i+')">'
+      +'<div class="card-main"><div style="flex:1;min-width:0"><div class="card-name">'+p.Prodotto+(hasExtra?' <span style="font-size:10px;color:#9ca3af">▼</span>':'')+'</div><div class="card-meta">'+(p.Codice?'<span style="margin-right:6px">#'+p.Codice+'</span>':'')+(p.Categoria||'')+'</div></div>'
+      +'<div class="card-right"><span class="badge '+s.c+'">'+s.l+'</span>'+(p.Quantità>0?'<div class="qty-negozio">negozio: <b>'+p.Quantità+'</b></div>':'')+'</div></div>'
+      +(hasExtra?'<div class="card-detail" id="detail-'+i+'">'+detailBoxes+'</div>':'')
+      +'</div>';
+  }).join("");
+}
+
+function toggleFilter(f){
+  activeFilter=activeFilter===f?"tutti":f;
+  document.querySelectorAll(".stat").forEach(function(el){el.classList.remove("active");});
+  if(activeFilter!=="tutti")document.getElementById("stat"+f.charAt(0).toUpperCase()+f.slice(1)).classList.add("active");
+  render();
+}
+function setFilter(c){activeFilter=c;render();}
+function showToast(m){
+  var t=document.getElementById("toast");
+  t.textContent=m;t.classList.add("show");
+  setTimeout(function(){t.classList.remove("show");},2800);
+}
+document.getElementById("searchInput").addEventListener("input",render);
+document.getElementById("fileInput").addEventListener("change",function(e){if(e.target.files[0])parseFile(e.target.files[0]);e.target.value="";});
+</script>
+</body>
+</html>
